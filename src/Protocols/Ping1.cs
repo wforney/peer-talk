@@ -1,195 +1,197 @@
-﻿using Common.Logging;
-using Ipfs;
-using Ipfs.CoreApi;
-using ProtoBuf;
-using Semver;
-using System;
-using System.Collections.Concurrent;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
-
-
-namespace PeerTalk.Protocols
+﻿namespace PeerTalk.Protocols
 {
-    /// <summary>
-    ///   Ping Protocol version 1.0
-    /// </summary>
-    public class Ping1 : IPeerProtocol, IService
-    {
-        const int PingSize = 32;
+	using Ipfs;
+	using Ipfs.CoreApi;
+	using Microsoft.Extensions.Logging;
+	using Semver;
+	using System;
+	using System.Collections.Generic;
+	using System.IO;
+	using System.Linq;
+	using System.Threading;
+	using System.Threading.Tasks;
 
-        static ILog log = LogManager.GetLogger(typeof(Ping1));
+	/// <summary>
+	///   Ping Protocol version 1.0
+	/// </summary>
+	public class Ping1 : IPeerProtocol, IService
+	{
+		private const int PingSize = 32;
+		private readonly ILogger<Ping1> _logger;
 
-        /// <inheritdoc />
-        public string Name { get; } = "ipfs/ping";
+		/// <summary>
+		/// Initializes a new instance of the <see cref="Ping1"/> class.
+		/// </summary>
+		/// <param name="logger">The logger.</param>
+		/// <exception cref="ArgumentNullException">logger</exception>
+		public Ping1(ILogger<Ping1> logger)
+		{
+			_logger = logger ?? throw new ArgumentNullException(nameof(logger));
+		}
 
-        /// <inheritdoc />
-        public SemVersion Version { get; } = new SemVersion(1, 0);
+		/// <inheritdoc />
+		public string Name { get; } = "ipfs/ping";
 
-        /// <summary>
-        ///   Provides access to other peers.
-        /// </summary>
-        public Swarm Swarm { get; set; }
+		/// <inheritdoc />
+		public SemVersion Version { get; } = new SemVersion(1, 0);
 
-        /// <inheritdoc />
-        public override string ToString()
-        {
-            return $"/{Name}/{Version}";
-        }
+		/// <summary>
+		///   Provides access to other peers.
+		/// </summary>
+		public Swarm Swarm { get; set; }
 
-        /// <inheritdoc />
-        public async Task ProcessMessageAsync(PeerConnection connection, Stream stream, CancellationToken cancel = default(CancellationToken))
-        {
-            while (true)
-            {
-                // Read the message.
-                var request = new byte[PingSize];
-                await stream.ReadExactAsync(request, 0, PingSize, cancel).ConfigureAwait(false);
-                log.Debug($"got ping from {connection.RemotePeer}");
+		/// <inheritdoc />
+		public override string ToString() => $"/{Name}/{Version}";
 
-                // Echo the message
-                await stream.WriteAsync(request, 0, PingSize, cancel).ConfigureAwait(false);
-                await stream.FlushAsync(cancel).ConfigureAwait(false);
-            }
-        }
+		/// <inheritdoc />
+		public async Task ProcessMessageAsync(PeerConnection connection, Stream stream, CancellationToken cancel = default)
+		{
+			while (true)
+			{
+				// Read the message.
+				var request = new byte[PingSize];
+				await stream.ReadExactAsync(request, 0, PingSize, cancel).ConfigureAwait(false);
+				_logger.LogDebug("got ping from {ConnectionRemotePeer}", connection.RemotePeer);
 
-        /// <inheritdoc />
-        public Task StartAsync()
-        {
-            log.Debug("Starting");
+				// Echo the message
+				await stream.WriteAsync(request, 0, PingSize, cancel).ConfigureAwait(false);
+				await stream.FlushAsync(cancel).ConfigureAwait(false);
+			}
+		}
 
-            Swarm.AddProtocol(this);
+		/// <inheritdoc />
+		public Task StartAsync()
+		{
+			_logger.LogDebug("Starting");
 
-            return Task.CompletedTask;
-        }
+			Swarm.AddProtocol(this);
 
-        /// <inheritdoc />
-        public Task StopAsync()
-        {
-            log.Debug("Stopping");
+			return Task.CompletedTask;
+		}
 
-            Swarm.RemoveProtocol(this);
+		/// <inheritdoc />
+		public Task StopAsync()
+		{
+			_logger.LogDebug("Stopping");
 
-            return Task.CompletedTask;
-        }
+			Swarm.RemoveProtocol(this);
 
-        /// <summary>
-        ///   Send echo requests to a peer.
-        /// </summary>
-        /// <param name="peerId">
-        ///   The peer ID to receive the echo requests.
-        /// </param>
-        /// <param name="count">
-        ///   The number of echo requests to send.  Defaults to 10.
-        /// </param>
-        /// <param name="cancel">
-        ///   Is used to stop the task.  When cancelled, the <see cref="TaskCanceledException"/> is raised.
-        /// </param>
-        /// <returns>
-        ///   A task that represents the asynchronous operation. The task's value is
-        ///   the sequence of <see cref="PingResult"/>.
-        /// </returns>
-        public async Task<IEnumerable<PingResult>> PingAsync(MultiHash peerId, int count = 10, CancellationToken cancel = default(CancellationToken))
-        {
-            var peer = new Peer { Id = peerId };
-            return await PingAsync(peer, count, cancel).ConfigureAwait(false);
-        }
+			return Task.CompletedTask;
+		}
 
-        /// <summary>
-        ///   Send echo requests to a peer.
-        /// </summary>
-        /// <param name="address">
-        ///   The address of a peer to receive the echo requests.
-        /// </param>
-        /// <param name="count">
-        ///   The number of echo requests to send.  Defaults to 10.
-        /// </param>
-        /// <param name="cancel">
-        ///   Is used to stop the task.  When cancelled, the <see cref="TaskCanceledException"/> is raised.
-        /// </param>
-        /// <returns>
-        ///   A task that represents the asynchronous operation. The task's value is
-        ///   the sequence of <see cref="PingResult"/>.
-        /// </returns>
-        public async Task<IEnumerable<PingResult>> PingAsync(MultiAddress address, int count = 10, CancellationToken cancel = default(CancellationToken))
-        {
-            var peer = Swarm.RegisterPeerAddress(address);
-            return await PingAsync(peer, count, cancel).ConfigureAwait(false);
-        }
+		/// <summary>
+		///   Send echo requests to a peer.
+		/// </summary>
+		/// <param name="peerId">
+		///   The peer ID to receive the echo requests.
+		/// </param>
+		/// <param name="count">
+		///   The number of echo requests to send.  Defaults to 10.
+		/// </param>
+		/// <param name="cancel">
+		///   Is used to stop the task.  When cancelled, the <see cref="TaskCanceledException"/> is raised.
+		/// </param>
+		/// <returns>
+		///   A task that represents the asynchronous operation. The task's value is
+		///   the sequence of <see cref="PingResult"/>.
+		/// </returns>
+		public async Task<IEnumerable<PingResult>> PingAsync(MultiHash peerId, int count = 10, CancellationToken cancel = default)
+		{
+			var peer = new Peer { Id = peerId };
+			return await PingAsync(peer, count, cancel).ConfigureAwait(false);
+		}
 
-        async Task<IEnumerable<PingResult>> PingAsync(Peer peer, int count, CancellationToken cancel)
-        {
-            var ping = new byte[PingSize];
-            var rng = new Random();
-            var results = new List<PingResult>
-            {
-                new PingResult { Success = true, Text = $"PING {peer}."}
-            };
-            var totalTime = TimeSpan.Zero;
+		/// <summary>
+		///   Send echo requests to a peer.
+		/// </summary>
+		/// <param name="address">
+		///   The address of a peer to receive the echo requests.
+		/// </param>
+		/// <param name="count">
+		///   The number of echo requests to send.  Defaults to 10.
+		/// </param>
+		/// <param name="cancel">
+		///   Is used to stop the task.  When cancelled, the <see cref="TaskCanceledException"/> is raised.
+		/// </param>
+		/// <returns>
+		///   A task that represents the asynchronous operation. The task's value is
+		///   the sequence of <see cref="PingResult"/>.
+		/// </returns>
+		public async Task<IEnumerable<PingResult>> PingAsync(MultiAddress address, int count = 10, CancellationToken cancel = default)
+		{
+			var peer = Swarm.RegisterPeerAddress(address);
+			return await PingAsync(peer, count, cancel).ConfigureAwait(false);
+		}
 
-            using (var stream = await Swarm.DialAsync(peer, this.ToString(), cancel))
-            {
-                for (int i = 0; i < count; ++i)
-                {
-                    rng.NextBytes(ping);
+		private async Task<IEnumerable<PingResult>> PingAsync(Peer peer, int count, CancellationToken cancel)
+		{
+			var ping = new byte[PingSize];
+			var rng = new Random();
+			var results = new List<PingResult>
+			{
+				new PingResult { Success = true, Text = $"PING {peer}."}
+			};
+			var totalTime = TimeSpan.Zero;
 
-                    var start = DateTime.Now;
-                    try
-                    {
-                        await stream.WriteAsync(ping, 0, ping.Length).ConfigureAwait(false); ;
-                        await stream.FlushAsync(cancel).ConfigureAwait(false);
+			using (var stream = await Swarm.DialAsync(peer, this.ToString(), cancel))
+			{
+				for (int i = 0; i < count; ++i)
+				{
+					rng.NextBytes(ping);
 
-                        var response = new byte[PingSize];
-                        await stream.ReadExactAsync(response, 0, PingSize, cancel).ConfigureAwait(false);
+					var start = DateTime.Now;
+					try
+					{
+						await stream.WriteAsync(ping, 0, ping.Length).ConfigureAwait(false); ;
+						await stream.FlushAsync(cancel).ConfigureAwait(false);
 
-                        var result = new PingResult
-                        {
-                            Time = DateTime.Now - start,
-                        };
-                        totalTime += result.Time;
-                        if (ping.SequenceEqual(response))
-                        {
-                            result.Success = true;
-                            result.Text = "";
-                        }
-                        else
-                        {
-                            result.Success = false;
-                            result.Text = "ping packet was incorrect!";
-                        }
+						var response = new byte[PingSize];
+						await stream.ReadExactAsync(response, 0, PingSize, cancel).ConfigureAwait(false);
 
-                        results.Add(result);
-                    }
-                    catch (Exception e)
-                    {
-                        results.Add(new PingResult
-                        {
-                            Success = false,
-                            Time = DateTime.Now - start,
-                            Text = e.Message
-                        });
-                    }
-                }
-            }
+						var result = new PingResult
+						{
+							Time = DateTime.Now - start,
+						};
+						totalTime += result.Time;
+						if (ping.SequenceEqual(response))
+						{
+							result.Success = true;
+							result.Text = "";
+						}
+						else
+						{
+							result.Success = false;
+							result.Text = "ping packet was incorrect!";
+						}
 
-            var avg = totalTime.TotalMilliseconds / count;
-            results.Add(new PingResult
-            {
-                Success = true,
-                Text = $"Average latency: {avg.ToString("0.000")}ms"
-            });
+						results.Add(result);
+					}
+					catch (Exception e)
+					{
+						results.Add(
+							 new PingResult
+							 {
+								 Success = false,
+								 Time = DateTime.Now - start,
+								 Text = e.Message
+							 });
+					}
+				}
+			}
 
-            return results;
-        }
+			var avg = totalTime.TotalMilliseconds / count;
+			results.Add(
+				 new PingResult
+				 {
+					 Success = true,
+					 Text = $"Average latency: {avg:0.000}ms"
+				 });
 
-    }
+			return results;
+		}
+	}
 
-    class PingMessage
-    {
-
-    }
+	internal class PingMessage
+	{
+	}
 }

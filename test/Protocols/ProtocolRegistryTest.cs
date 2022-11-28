@@ -1,22 +1,18 @@
-﻿using Ipfs;
+﻿namespace PeerTalk.Protocols;
+
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
-using System;
-using System.Linq;
-using System.IO;
-using System.Threading;
-using System.Threading.Tasks;
+using PeerTalkTests;
 
-namespace PeerTalk.Protocols
+[TestClass]
+public class ProtocolRegistryTest
 {
-    [TestClass]
-    public class ProtocolRegistryTest
-    {
-        [TestMethod]
-        public void PreRegistered()
-        {
-            CollectionAssert.Contains(ProtocolRegistry.Protocols.Keys, "/multistream/1.0.0");
-            CollectionAssert.Contains(ProtocolRegistry.Protocols.Keys, "/plaintext/1.0.0");
-        }
-
-    }
+	[TestMethod]
+	public void PreRegistered()
+	{
+		var sp = TestSetup.GetScopedServiceProvider();
+		var protocolRegistry = sp.GetRequiredService<ProtocolRegistry>();
+		CollectionAssert.Contains(protocolRegistry.Protocols.Keys, "/multistream/1.0.0");
+		CollectionAssert.Contains(protocolRegistry.Protocols.Keys, "/plaintext/1.0.0");
+	}
 }

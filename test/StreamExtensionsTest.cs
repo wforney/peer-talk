@@ -1,4 +1,6 @@
-﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
+﻿namespace PeerTalk;
+
+using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Ipfs;
 using System;
 using System.IO;
@@ -7,9 +9,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Net.Sockets;
 
-namespace PeerTalk
-{
-    [TestClass]
+[TestClass]
     public class StreamExtensionsTest
     {
         [TestMethod]
@@ -70,4 +70,3 @@ namespace PeerTalk
             }
         }
     }
-}

@@ -1,15 +1,11 @@
-﻿using Ipfs;
-using Semver;
-using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
-
-namespace PeerTalk.Protocols
+﻿namespace PeerTalk.Protocols
 {
+    using Semver;
+    using System;
+    using System.IO;
+    using System.Threading;
+    using System.Threading.Tasks;
+
     /// <summary>
     ///   Defines the messages that can be exchanged between two peers.
     /// </summary>
@@ -44,7 +40,6 @@ namespace PeerTalk.Protocols
         /// <returns>
         ///   A task that represents the asynchronous operation.
         /// </returns>
-        Task ProcessMessageAsync(PeerConnection connection, Stream stream, CancellationToken cancel = default(CancellationToken));
-
+        Task ProcessMessageAsync(PeerConnection connection, Stream stream, CancellationToken cancel = default);
     }
 }

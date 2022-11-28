@@ -1,13 +1,9 @@
-﻿using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
-
-namespace PeerTalk
+﻿namespace PeerTalk
 {
+    using System.IO;
+    using System.Threading;
+    using System.Threading.Tasks;
+
     /// <summary>
     ///   Provides access to a private network of peers.
     /// </summary>
@@ -39,6 +35,6 @@ namespace PeerTalk
         ///   the private network.
         ///   </para>
         /// </remarks>
-        Task<Stream> ProtectAsync(PeerConnection connection, CancellationToken cancel = default(CancellationToken));
+        Task<Stream> ProtectAsync(PeerConnection connection, CancellationToken cancel = default);
     }
 }

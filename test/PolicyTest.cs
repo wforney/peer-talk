@@ -1,12 +1,12 @@
-﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
+﻿namespace PeerTalk;
+
+using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace PeerTalk
-{
-    [TestClass]
+[TestClass]
     public class PolicyTest
     {
         [TestMethod]
@@ -23,4 +23,3 @@ namespace PeerTalk
             Assert.IsFalse(policy.IsAllowed("foo"));
         }
     }
-}

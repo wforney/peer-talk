@@ -1,12 +1,5 @@
-﻿using ProtoBuf;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿/* From https://github.com/libp2p/js-libp2p-secio/blob/master/src/handshake/secio.proto.js
 
-/* From https://github.com/libp2p/js-libp2p-secio/blob/master/src/handshake/secio.proto.js
- 
 module.exports = `message Propose
 {
     optional bytes rand = 1;
@@ -24,33 +17,34 @@ message Exchange
 
 namespace PeerTalk.SecureCommunication
 {
-    [ProtoContract]
-    class Secio1Propose
-    {
-        [ProtoMember(1)]
-        public byte[] Nonce;
+	using ProtoBuf;
 
-        [ProtoMember(2)]
-        public byte[] PublicKey;
+	[ProtoContract]
+	internal class Secio1Propose
+	{
+		[ProtoMember(1)]
+		public byte[] Nonce;
 
-        [ProtoMember(3)]
-        public string Exchanges;
+		[ProtoMember(2)]
+		public byte[] PublicKey;
 
-        [ProtoMember(4)]
-        public string Ciphers;
+		[ProtoMember(3)]
+		public string Exchanges;
 
-        [ProtoMember(5)]
-        public string Hashes;
-    }
+		[ProtoMember(4)]
+		public string Ciphers;
 
-    [ProtoContract]
-    class Secio1Exchange
-    {
-        [ProtoMember(1)]
-        public byte[] EPublicKey;
+		[ProtoMember(5)]
+		public string Hashes;
+	}
 
-        [ProtoMember(2)]
-        public byte[] Signature;
+	[ProtoContract]
+	internal class Secio1Exchange
+	{
+		[ProtoMember(1)]
+		public byte[] EPublicKey;
 
-    }
+		[ProtoMember(2)]
+		public byte[] Signature;
+	}
 }

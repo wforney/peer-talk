@@ -1,4 +1,6 @@
-﻿using Ipfs;
+﻿namespace PeerTalk.Cryptography;
+
+using Ipfs;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System;
 using System.Linq;
@@ -7,9 +9,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Collections.Generic;
 
-namespace PeerTalk.Cryptography
-{
-    [TestClass]
+[TestClass]
     public class EphermalKeyTest
     {
         [TestMethod]
@@ -26,4 +26,3 @@ namespace PeerTalk.Cryptography
         }
 
     }
-}

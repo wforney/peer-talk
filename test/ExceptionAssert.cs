@@ -1,13 +1,13 @@
-﻿using System;
+﻿namespace PeerTalk;
+
+using System;
 using System.Linq;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
-namespace PeerTalk
-{
-    /// <summary>
-    ///   Asserting an <see cref="Exception"/>.
-    /// </summary>
-    public static class ExceptionAssert
+/// <summary>
+///   Asserting an <see cref="Exception"/>.
+/// </summary>
+public static class ExceptionAssert
     {
 
         public static T Throws<T>(Action action, string expectedMessage = null) where T : Exception
@@ -46,4 +46,3 @@ namespace PeerTalk
         }
 
     }
-}

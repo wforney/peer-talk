@@ -1,15 +1,13 @@
-﻿using Ipfs;
-using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
-using System.Threading.Tasks.Dataflow;
-
-namespace PeerTalk.Multiplex
+﻿namespace PeerTalk.Multiplex
 {
+    using Ipfs;
+    using Nito.AsyncEx.Synchronous;
+    using System;
+    using System.IO;
+    using System.Threading;
+    using System.Threading.Tasks;
+    using System.Threading.Tasks.Dataflow;
+
     /// <summary>
     ///   A duplex substream used by the <see cref="Muxer"/>.
     /// </summary>
@@ -23,12 +21,11 @@ namespace PeerTalk.Multiplex
     /// </remarks>
     public class Substream : Stream
     {
-        BufferBlock<byte[]> inBlocks = new BufferBlock<byte[]>();
-        byte[] inBlock;
-        int inBlockOffset;
-        bool eos;
-
-        Stream outStream = new MemoryStream();
+        private readonly BufferBlock<byte[]> inBlocks = new BufferBlock<byte[]>();
+        private byte[] inBlock;
+        private int inBlockOffset;
+        private bool eos;
+        private Stream outStream = new MemoryStream();
 
         /// <summary>
         ///   The type of message of sent to the other side.
@@ -46,7 +43,7 @@ namespace PeerTalk.Multiplex
         ///   The session initiator allocates odd IDs and the session receiver allocates even IDs.
         /// </value>
         public long Id;
-        
+
         /// <summary>
         ///   A name for the stream.
         /// </summary>
@@ -83,16 +80,10 @@ namespace PeerTalk.Multiplex
         }
 
         /// <inheritdoc />
-        public override long Seek(long offset, SeekOrigin origin)
-        {
-            throw new NotSupportedException();
-        }
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
 
         /// <inheritdoc />
-        public override void SetLength(long value)
-        {
-            throw new NotSupportedException();
-        }
+        public override void SetLength(long value) => throw new NotSupportedException();
 
         /// <summary>
         ///   Add some data that should be read by the stream.
@@ -104,10 +95,7 @@ namespace PeerTalk.Multiplex
         ///   <b>AddData</b> is called when the muxer receives a packet for this
         ///   stream.
         /// </remarks>
-        public void AddData(byte[] data)
-        {
-            inBlocks.Post(data);
-        }
+        public void AddData(byte[] data) => inBlocks.Post(data);
 
         /// <summary>
         ///   Indicates that the stream will not receive any more data.
@@ -117,18 +105,13 @@ namespace PeerTalk.Multiplex
         ///   <b>NoMoreData</b> is called when the muxer receives a packet to
         ///   close this stream.
         /// </remarks>
-        public void NoMoreData()
-        {
-            inBlocks.Complete();
-        }
+        public void NoMoreData() => inBlocks.Complete();
 
         /// <inheritdoc />
-        public override int Read(byte[] buffer, int offset, int count)
-        {
-#pragma warning disable VSTHRD002 
-            return ReadAsync(buffer, offset, count).GetAwaiter().GetResult();
-#pragma warning restore VSTHRD002 
-        }
+        public override int Read(byte[] buffer, int offset, int count) =>
+#pragma warning disable VSTHRD002
+            ReadAsync(buffer, offset, count).GetAwaiter().GetResult();
+#pragma warning restore VSTHRD002
 
         /// <inheritdoc />
         public override async Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
@@ -160,22 +143,23 @@ namespace PeerTalk.Multiplex
                     }
                 }
             }
+
             return total;
         }
-        
+
         /// <inheritdoc />
-        public override void Flush()
-        {
-#pragma warning disable VSTHRD002 
+        public override void Flush() =>
+#pragma warning disable VSTHRD002
             FlushAsync().GetAwaiter().GetResult();
-#pragma warning restore VSTHRD002 
-        }
+#pragma warning restore VSTHRD002
 
         /// <inheritdoc />
         public override async Task FlushAsync(CancellationToken cancel)
         {
             if (outStream.Length == 0)
+            {
                 return;
+            }
 
             // Send the response over the muxer channel
             using (await Muxer.AcquireWriteAccessAsync().ConfigureAwait(false))
@@ -196,40 +180,30 @@ namespace PeerTalk.Multiplex
         }
 
         /// <inheritdoc />
-        public override void Write(byte[] buffer, int offset, int count)
-        {
-            outStream.Write(buffer, offset, count);
-        }
+        public override void Write(byte[] buffer, int offset, int count) => outStream.Write(buffer, offset, count);
 
         /// <inheritdoc />
-        public override Task WriteAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
-        {
-            return outStream.WriteAsync(buffer, offset, count, cancellationToken);
-        }
+        public override Task WriteAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken) => outStream.WriteAsync(buffer, offset, count, cancellationToken);
 
         /// <inheritdoc />
-        public override void WriteByte(byte value)
-        {
-            outStream.WriteByte(value);
-        }
+        public override void WriteByte(byte value) => outStream.WriteByte(value);
 
         /// <inheritdoc />
         protected override void Dispose(bool disposing)
         {
             if (disposing)
             {
-                Muxer?.RemoveStreamAsync(this);
+                _ = (Muxer?.RemoveStreamAsync(this).WaitAndUnwrapException());
 
                 eos = true;
-                if (outStream != null)
+                if (!(outStream is null))
                 {
                     outStream.Dispose();
                     outStream = null;
                 }
             }
+
             base.Dispose(disposing);
         }
     }
-
 }
-

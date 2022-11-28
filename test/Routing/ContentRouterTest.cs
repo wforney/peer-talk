@@ -1,25 +1,24 @@
-﻿using Ipfs;
+﻿namespace PeerTalk.Routing;
+
+using Ipfs;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace PeerTalk.Routing
-{
-    
-    [TestClass]
+
+[TestClass]
     public class ContentRouterTest
     {
-        Peer self = new Peer
-        {
+	private Peer self = new()
+		{
             AgentVersion = "self",
             Id = "QmXK9VBxaXFuuT29AaPUTgW3jBWZ9JgLVZYdMYTHC6LLAH",
             PublicKey = "CAASXjBcMA0GCSqGSIb3DQEBAQUAA0sAMEgCQQCC5r4nQBtnd9qgjnG8fBN5+gnqIeWEIcUFUdCG4su/vrbQ1py8XGKNUBuDjkyTv25Gd3hlrtNJV3eOKZVSL8ePAgMBAAE="
         };
-
-        Peer other = new Peer
-        {
+	private Peer other = new()
+		{
             AgentVersion = "other",
             Id = "QmdpwjdB94eNm2Lcvp9JqoCxswo3AKQqjLuNZyLixmCM1h",
             Addresses = new MultiAddress[]
@@ -27,8 +26,7 @@ namespace PeerTalk.Routing
                 new MultiAddress("/ip4/127.0.0.1/tcp/4001")
             }
         };
-
-        Cid cid1 = "zBunRGrmCGokA1oMESGGTfrtcMFsVA8aEtcNzM54akPWXF97uXCqTjF3GZ9v8YzxHrG66J8QhtPFWwZebRZ2zeUEELu67";
+	private Cid cid1 = "zBunRGrmCGokA1oMESGGTfrtcMFsVA8aEtcNzM54akPWXF97uXCqTjF3GZ9v8YzxHrG66J8QhtPFWwZebRZ2zeUEELu67";
 
         [TestMethod]
         public void Add()
@@ -109,4 +107,3 @@ namespace PeerTalk.Routing
             }
         }
     }
-}

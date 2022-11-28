@@ -1,14 +1,13 @@
-﻿using Common.Logging;
-using Ipfs;
-using Makaretu.Dns;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-
-namespace PeerTalk.Discovery
+﻿namespace PeerTalk.Discovery
 {
+    using Ipfs;
+    using Makaretu.Dns;
+    using Microsoft.Extensions.Logging;
+    using SharedCode.Notifications;
+    using System.Collections.Generic;
+    using System.Linq;
+    using System.Text;
+
     /// <summary>
     ///   Discovers peers using Multicast DNS according to
     ///   <see href="https://github.com/libp2p/specs/blob/master/discovery/mdns.md"/>
@@ -19,7 +18,7 @@ namespace PeerTalk.Discovery
         ///   Creates a new instance of the class.  Sets the <see cref="Mdns.ServiceName"/>
         ///   to "_p2p._udp".
         /// </summary>
-        public MdnsNext()
+        public MdnsNext(ILogger<MdnsNext> logger, INotificationService notificationService) : base(logger, notificationService)
         {
             ServiceName = "_p2p._udp";
         }
@@ -34,13 +33,13 @@ namespace PeerTalk.Discovery
             );
 
             // The TXT records contain the multi addresses.
-            profile.Resources.RemoveAll(r => r is TXTRecord);
+            _ = profile.Resources.RemoveAll(r => r is TXTRecord);
             foreach (var address in LocalPeer.Addresses)
             {
                 profile.Resources.Add(new TXTRecord
                 {
                     Name = profile.FullyQualifiedName,
-                    Strings = { $"dnsaddr={address.ToString()}" }
+                    Strings = { $"dnsaddr={address}" }
                 });
             }
 
@@ -68,18 +67,20 @@ namespace PeerTalk.Discovery
         public static string SafeLabel(string label, int maxLength = 63)
         {
             if (label.Length <= maxLength)
+            {
                 return label;
+            }
 
             var sb = new StringBuilder();
             while (label.Length > maxLength)
             {
-                sb.Append(label.Substring(0, maxLength));
-                sb.Append('.');
+                _ = sb.Append(label.Substring(0, maxLength));
+                _ = sb.Append('.');
                 label = label.Substring(maxLength);
             }
-            sb.Append(label);
+
+            _ = sb.Append(label);
             return sb.ToString();
         }
-
     }
 }

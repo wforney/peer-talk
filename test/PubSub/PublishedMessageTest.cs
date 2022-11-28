@@ -1,4 +1,6 @@
-﻿using Ipfs;
+﻿namespace PeerTalk.PubSub;
+
+using Ipfs;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using ProtoBuf;
 using System;
@@ -7,14 +9,12 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace PeerTalk.PubSub
-{
-    
-    [TestClass]
+
+[TestClass]
     public class PublishedMessageTest
     {
-        Peer self = new Peer { Id = "QmXK9VBxaXFuuT29AaPUTgW3jBWZ9JgLVZYdMYTHC6LLAH" };
-        Peer other = new Peer { Id = "QmaCpDMGvV2BGHeYERUEnRQAwe3N8SzbUtfsmvsqQLuvuJ" };
+	private Peer self = new() { Id = "QmXK9VBxaXFuuT29AaPUTgW3jBWZ9JgLVZYdMYTHC6LLAH" };
+	private Peer other = new() { Id = "QmaCpDMGvV2BGHeYERUEnRQAwe3N8SzbUtfsmvsqQLuvuJ" };
 
         [TestMethod]
         public void RoundTrip()
@@ -74,4 +74,3 @@ namespace PeerTalk.PubSub
             Assert.AreEqual(1, msg.DataStream.ReadByte());
         }
     }
-}

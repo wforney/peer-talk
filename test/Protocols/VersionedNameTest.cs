@@ -1,4 +1,6 @@
-﻿using Ipfs;
+﻿namespace PeerTalk.Protocols;
+
+using Ipfs;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System;
 using System.Linq;
@@ -7,9 +9,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Collections.Generic;
 
-namespace PeerTalk.Protocols
-{
-    [TestClass]
+[TestClass]
     public class VersionedNameTest
     {
         [TestMethod]
@@ -108,4 +108,3 @@ namespace PeerTalk.Protocols
             Assert.AreEqual("/x/1.0.0", ordered[2].ToString());
         }
     }
-}

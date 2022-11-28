@@ -1,31 +1,41 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-
-namespace PeerTalk.Transports
+﻿namespace PeerTalk.Transports
 {
-    static class TransportRegistry
-    {
-        public static Dictionary<string, Func<IPeerTransport>> Transports;
+	using Microsoft.Extensions.Logging;
+	using System;
+	using System.Collections.Concurrent;
 
-        static TransportRegistry()
-        {
-            Transports = new Dictionary<string, Func<IPeerTransport>>();
-            Register("tcp", () => new Tcp());
-            Register("udp", () => new Udp());
-        }
+	/// <summary>
+	/// Class TransportRegistry.
+	/// </summary>
+	public class TransportRegistry
+	{
+		/// <summary>
+		/// The transports
+		/// </summary>
+		public ConcurrentDictionary<string, Func<IPeerTransport>> Transports;
 
-        public static void Register(string protocolName, Func<IPeerTransport> transport)
-        {
-            Transports.Add(protocolName, transport);
-        }
+		/// <summary>
+		/// Initializes a new instance of the <see cref="TransportRegistry"/> class.
+		/// </summary>
+		/// <param name="loggerFactory">The logger factory.</param>
+		public TransportRegistry(ILoggerFactory loggerFactory)
+		{
+			Transports = new ConcurrentDictionary<string, Func<IPeerTransport>>();
+			Register("tcp", () => new Tcp(loggerFactory.CreateLogger<Tcp>()));
+			Register("udp", () => new Udp(loggerFactory.CreateLogger<Udp>()));
+		}
 
-        public static void Deregister(string protocolName)
-        {
-            Transports.Remove(protocolName);
-        }
+		/// <summary>
+		/// Deregisters the specified protocol name.
+		/// </summary>
+		/// <param name="protocolName">Name of the protocol.</param>
+		public void Deregister(string protocolName) => Transports.TryRemove(protocolName, out _);
 
-    }
+		/// <summary>
+		/// Registers the specified protocol name.
+		/// </summary>
+		/// <param name="protocolName">Name of the protocol.</param>
+		/// <param name="transport">The transport.</param>
+		public void Register(string protocolName, Func<IPeerTransport> transport) => Transports.TryAdd(protocolName, transport);
+	}
 }

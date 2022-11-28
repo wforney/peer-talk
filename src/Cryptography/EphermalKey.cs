@@ -1,18 +1,12 @@
-﻿using Org.BouncyCastle.Asn1.X9;
-using Org.BouncyCastle.Crypto;
-using Org.BouncyCastle.Crypto.Parameters;
-using Org.BouncyCastle.Security;
-using Org.BouncyCastle.Utilities;
-using ProtoBuf;
-using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-
-namespace PeerTalk.Cryptography
+﻿namespace PeerTalk.Cryptography
 {
+    using Org.BouncyCastle.Asn1.X9;
+    using Org.BouncyCastle.Crypto.Parameters;
+    using Org.BouncyCastle.Security;
+    using Org.BouncyCastle.Utilities;
+    using System;
+    using System.Collections.Generic;
+
     /// <summary>
     ///   A short term key on a curve.
     /// </summary>
@@ -35,10 +29,7 @@ namespace PeerTalk.Cryptography
         /// <returns>
         ///   Returns the uncompressed EC point.
         /// </returns>
-        public byte[] PublicKeyBytes()
-        {
-            return publicKey.Q.GetEncoded(compressed: false);
-        }
+        public byte[] PublicKeyBytes() => publicKey.Q.GetEncoded(compressed: false);
 
         /// <summary>
         ///   Create a shared secret between this key and another.
@@ -72,8 +63,11 @@ namespace PeerTalk.Cryptography
         public static EphermalKey CreatePublicKeyFromIpfs(string curveName, byte[] bytes)
         {
             X9ECParameters ecP = ECNamedCurveTable.GetByName(curveName);
-            if (ecP == null)
+            if (ecP is null)
+            {
                 throw new KeyNotFoundException($"Unknown curve name '{curveName}'.");
+            }
+
             var domain = new ECDomainParameters(ecP.Curve, ecP.G, ecP.N, ecP.H, ecP.GetSeed());
             var q = ecP.Curve.DecodePoint(bytes);
             return new EphermalKey
@@ -81,7 +75,6 @@ namespace PeerTalk.Cryptography
                 publicKey = new ECPublicKeyParameters(q, domain)
             };
         }
-
 
         /// <summary>
         ///   Create a new ephermal key on the curve.
@@ -95,8 +88,11 @@ namespace PeerTalk.Cryptography
         public static EphermalKey Generate(string curveName)
         {
             X9ECParameters ecP = ECNamedCurveTable.GetByName(curveName);
-            if (ecP == null)
+            if (ecP is null)
+            {
                 throw new Exception($"Unknown curve name '{curveName}'.");
+            }
+
             var domain = new ECDomainParameters(ecP.Curve, ecP.G, ecP.N, ecP.H, ecP.GetSeed());
             var g = GeneratorUtilities.GetKeyPairGenerator("EC");
             g.Init(new ECKeyGenerationParameters(domain, new SecureRandom()));
@@ -108,6 +104,5 @@ namespace PeerTalk.Cryptography
                 publicKey = (ECPublicKeyParameters)keyPair.Public
             };
         }
-
     }
 }

@@ -1,17 +1,12 @@
-﻿using Org.BouncyCastle.Asn1.X9;
-using Org.BouncyCastle.Crypto;
-using Org.BouncyCastle.Crypto.Parameters;
-using Org.BouncyCastle.Security;
-using ProtoBuf;
-using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-
-namespace PeerTalk.Cryptography
+﻿namespace PeerTalk.Cryptography
 {
+    using Org.BouncyCastle.Crypto;
+    using Org.BouncyCastle.Crypto.Parameters;
+    using Org.BouncyCastle.Security;
+    using ProtoBuf;
+    using System;
+    using System.IO;
+
     /// <summary>
     ///   An asymmetric key.
     /// </summary>
@@ -27,7 +22,6 @@ namespace PeerTalk.Cryptography
 
         private Key()
         {
-
         }
 
         /// <summary>
@@ -48,7 +42,9 @@ namespace PeerTalk.Cryptography
             signer.Init(false, publicKey);
             signer.BlockUpdate(data, 0, data.Length);
             if (!signer.VerifySignature(signature))
+            {
                 throw new InvalidDataException("Data does not match the signature.");
+            }
         }
 
         /// <summary>
@@ -101,7 +97,7 @@ namespace PeerTalk.Cryptography
                 default:
                     throw new InvalidDataException($"Unknown key type of {ipfsKey.Type}.");
             }
-            
+
             return key;
         }
 
@@ -113,8 +109,10 @@ namespace PeerTalk.Cryptography
         /// </param>
         public static Key CreatePrivateKey(AsymmetricKeyParameter privateKey)
         {
-            var key = new Key();
-            key.privateKey = privateKey;
+            var key = new Key
+            {
+                privateKey = privateKey
+            };
 
             // Get the public key from the private key.
             if (privateKey is RsaPrivateCrtKeyParameters rsa)
@@ -133,10 +131,8 @@ namespace PeerTalk.Cryptography
                 key.publicKey = new ECPublicKeyParameters(q, ec.Parameters);
                 key.signingAlgorithmName = EcSigningAlgorithmName;
             }
-            if (key.publicKey == null)
-                throw new NotSupportedException($"The key type {privateKey.GetType().Name} is not supported.");
 
-            return key;
+            return key.publicKey is null ? throw new NotSupportedException($"The key type {privateKey.GetType().Name} is not supported.") : key;
         }
 
         enum KeyType

@@ -1,4 +1,6 @@
-﻿using Ipfs;
+﻿namespace PeerTalk.PubSub;
+
+using Ipfs;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using ProtoBuf;
 using System;
@@ -7,14 +9,12 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace PeerTalk.PubSub
-{
-    
-    [TestClass]
+
+[TestClass]
     public class TopicManagerTest
     {
-        Peer a = new Peer { Id = "QmXK9VBxaXFuuT29AaPUTgW3jBWZ9JgLVZYdMYTHC6LLAH" };
-        Peer b = new Peer { Id = "QmaCpDMGvV2BGHeYERUEnRQAwe3N8SzbUtfsmvsqQLuvuJ" };
+	private Peer a = new() { Id = "QmXK9VBxaXFuuT29AaPUTgW3jBWZ9JgLVZYdMYTHC6LLAH" };
+	private Peer b = new() { Id = "QmaCpDMGvV2BGHeYERUEnRQAwe3N8SzbUtfsmvsqQLuvuJ" };
 
         [TestMethod]
         public void Adding()
@@ -126,4 +126,3 @@ namespace PeerTalk.PubSub
 
         }
     }
-}

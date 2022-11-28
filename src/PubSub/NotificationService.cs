@@ -1,250 +1,276 @@
-﻿using Common.Logging;
-using Ipfs;
-using Ipfs.CoreApi;
-using System;
-using System.Collections.Generic;
-using System.Collections.Concurrent;
-using System.IO;
-using System.Linq;
-using System.Net;
-using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
-
-namespace PeerTalk.PubSub
+﻿namespace PeerTalk.PubSub
 {
-    /// <summary>
-    ///   A simple pub/sub messaging service that supports
-    ///   multiple message routers.
-    /// </summary>
-    /// <remarks>
-    ///   Relies upon the router(s) to deliver and receive messages from other peers.
-    /// </remarks>
-    public class NotificationService : IService, IPubSubApi
-    {
-        static ILog log = LogManager.GetLogger(typeof(NotificationService));
+	using Ipfs;
+	using Ipfs.CoreApi;
+	using Microsoft.Extensions.Logging;
+	using SharedCode.Notifications;
+	using System;
+	using System.Collections.Concurrent;
+	using System.Collections.Generic;
+	using System.IO;
+	using System.Linq;
+	using System.Text;
+	using System.Threading;
+	using System.Threading.Tasks;
 
-        class TopicHandler
-        {
-            public string Topic;
-            public Action<IPublishedMessage> Handler;
-        }
-        
-        long nextSequenceNumber;
-        ConcurrentDictionary<TopicHandler, TopicHandler> topicHandlers;
-        MessageTracker tracker = new MessageTracker();
-        
-        // TODO: A general purpose CancellationTokenSource that stops publishing of
-        // messages when this service is stopped.
+	/// <summary>
+	///   A simple pub/sub messaging service that supports
+	///   multiple message routers.
+	/// </summary>
+	/// <remarks>
+	///   Relies upon the router(s) to deliver and receive messages from other peers.
+	/// </remarks>
+	public partial class NotificationService : IService, IPubSubApi
+	{
 
-        /// <summary>
-        ///   The local peer.
-        /// </summary>
-        public Peer LocalPeer { get; set; }
+		private long nextSequenceNumber;
+		private ConcurrentDictionary<TopicHandler, TopicHandler> topicHandlers;
+		private readonly MessageTracker tracker = new MessageTracker();
+		private CancellationTokenSource cancellationTokenSource;
 
-        /// <summary>
-        ///   Sends and receives messages to other peers.
-        /// </summary>
-        public List<IMessageRouter> Routers { get; set; } = new List<IMessageRouter>
-        {
-            new LoopbackRouter()
-        };
+		/// <summary>
+		/// Initializes a new instance of the <see cref="NotificationService"/> class.
+		/// </summary>
+		/// <param name="logger">The logger.</param>
+		/// <param name="notificationService">The notification service.</param>
+		/// <exception cref="ArgumentNullException">logger</exception>
+		/// <exception cref="ArgumentNullException">notificationService</exception>
+		public NotificationService(ILogger<NotificationService> logger, INotificationService notificationService)
+		{
+			_logger = logger ?? throw new ArgumentNullException(nameof(logger));
+			_notificationService = notificationService ?? throw new ArgumentNullException(nameof(notificationService));
+			Routers = new List<IMessageRouter>
+			{
+				new LoopbackRouter(_notificationService)
+			};
+		}
 
-        /// <summary>
-        ///   The number of messages that have published.
-        /// </summary>
-        public ulong MesssagesPublished;
+		/// <summary>
+		///   The local peer.
+		/// </summary>
+		public Peer LocalPeer { get; set; }
 
-        /// <summary>
-        ///   The number of messages that have been received.
-        /// </summary>
-        public ulong MesssagesReceived;
+		/// <summary>
+		///   Sends and receives messages to other peers.
+		/// </summary>
+		public List<IMessageRouter> Routers { get; set; }
 
-        /// <summary>
-        ///   The number of duplicate messages that have been received.
-        /// </summary>
-        public ulong DuplicateMesssagesReceived;
+		/// <summary>
+		///   The number of messages that have published.
+		/// </summary>
+		public ulong MesssagesPublished;
 
-        /// <inheritdoc />
-        public async Task StartAsync()
-        {
-            topicHandlers = new ConcurrentDictionary<TopicHandler, TopicHandler>();
+		/// <summary>
+		///   The number of messages that have been received.
+		/// </summary>
+		public ulong MesssagesReceived;
 
-            // Resolution of 100 nanoseconds.
-            nextSequenceNumber = DateTime.UtcNow.Ticks;
+		/// <summary>
+		///   The number of duplicate messages that have been received.
+		/// </summary>
+		public ulong DuplicateMesssagesReceived;
 
-            // Init the stats.
-            MesssagesPublished = 0;
-            MesssagesReceived = 0;
-            DuplicateMesssagesReceived = 0;
+		private readonly List<IDisposable> _subscriptions = new List<IDisposable>();
+		private readonly ILogger<NotificationService> _logger;
+		private readonly INotificationService _notificationService;
 
-            // Listen to the routers.
-            foreach (var router in Routers)
-            {
-                router.MessageReceived += Router_MessageReceived;
-                await router.StartAsync().ConfigureAwait(false);
-            }
-        }
+		/// <inheritdoc />
+		public async Task StartAsync()
+		{
+			cancellationTokenSource?.Cancel();
+			cancellationTokenSource = new CancellationTokenSource();
 
-        /// <inheritdoc />
-        public async Task StopAsync()
-        {
-            topicHandlers.Clear();
+			topicHandlers = new ConcurrentDictionary<TopicHandler, TopicHandler>();
 
-            foreach (var router in Routers)
-            {
-                router.MessageReceived -= Router_MessageReceived;
-                await router.StopAsync();
-            }
-        }
+			// Resolution of 100 nanoseconds.
+			nextSequenceNumber = DateTime.UtcNow.Ticks;
 
-        /// <summary>
-        ///   Creates a message for the topic and data.
-        /// </summary>
-        /// <param name="topic">
-        ///   The topic name/id.
-        /// </param>
-        /// <param name="data">
-        ///   The payload of message.
-        /// </param>
-        /// <returns>
-        ///   A unique published message.
-        /// </returns>
-        /// <remarks>
-        ///   The <see cref="PublishedMessage.SequenceNumber"/> is a monitonically 
-        ///   increasing unsigned long.
-        /// </remarks>
-        public PublishedMessage CreateMessage(string topic, byte[] data)
-        {
-            var next = Interlocked.Increment(ref nextSequenceNumber);
-            var seqno = BitConverter.GetBytes(next);
-            if (BitConverter.IsLittleEndian)
-            {
-                seqno = seqno.Reverse().ToArray();
-            }
-            return new PublishedMessage
-            {
-                Topics = new string[] { topic },
-                Sender = LocalPeer,
-                SequenceNumber = seqno,
-                DataBytes = data
-            };
-        }
+			// Init the stats.
+			MesssagesPublished = 0;
+			MesssagesReceived = 0;
+			DuplicateMesssagesReceived = 0;
 
-        /// <inheritdoc />
-        public Task<IEnumerable<string>> SubscribedTopicsAsync(CancellationToken cancel = default(CancellationToken))
-        {
-            var topics = topicHandlers.Values
-                .Select(t => t.Topic)
-                .Distinct();
-            return Task.FromResult(topics);
-        }
+			// Listen to the routers.
+			foreach (var router in Routers)
+			{
+				_subscriptions.Add(_notificationService.Subscribe<MessageReceived>(m => RouterMessageReceivedAsync(m.MessageRouter, m.PublishedMessage)));
+				await router.StartAsync().ConfigureAwait(false);
+			}
+		}
 
-        /// <inheritdoc />
-        public Task<IEnumerable<Peer>> PeersAsync(string topic = null, CancellationToken cancel = default(CancellationToken))
-        {
-            var peers = Routers
-                .SelectMany(r => r.InterestedPeers(topic))
-                .Distinct();
-            return Task.FromResult(peers);
-        }
+		/// <inheritdoc />
+		public async Task StopAsync()
+		{
+			cancellationTokenSource?.Cancel();
+			cancellationTokenSource = null;
 
-        /// <inheritdoc />
-        public Task PublishAsync(string topic, string message, CancellationToken cancel = default(CancellationToken))
-        {
-            return PublishAsync(topic, Encoding.UTF8.GetBytes(message), cancel);
-        }
+			topicHandlers.Clear();
 
-        /// <inheritdoc />
-        public Task PublishAsync(string topic, Stream message, CancellationToken cancel = default(CancellationToken))
-        {
-            using (var ms = new MemoryStream())
-            {
-#pragma warning disable VSTHRD103
-                message.CopyTo(ms);
-#pragma warning disable VSTHRD103 
-                return PublishAsync(topic, ms.ToArray(), cancel);
-            }
-        }
+			foreach (var subscription in _subscriptions)
+			{
+				subscription?.Dispose();
+			}
 
-        /// <inheritdoc />
-        public Task PublishAsync(string topic, byte[] message, CancellationToken cancel = default(CancellationToken))
-        {
-            var msg = CreateMessage(topic, message);
-            ++MesssagesPublished;
-            return Task
-                .WhenAll(Routers.Select(r => r.PublishAsync(msg, cancel)));
-        }
+			_subscriptions.Clear();
 
-        /// <inheritdoc />
-        public async Task SubscribeAsync(string topic, Action<IPublishedMessage> handler, CancellationToken cancellationToken)
-        {
-            var topicHandler = new TopicHandler { Topic = topic, Handler = handler };
-            topicHandlers.TryAdd(topicHandler, topicHandler);
+			foreach (var router in Routers)
+			{
+				await router.StopAsync();
+			}
+		}
 
-            // TODO: need a better way.
-#pragma warning disable VSTHRD101 
-            cancellationToken.Register(async () =>
-            {
-                topicHandlers.TryRemove(topicHandler, out _);
-                if (topicHandlers.Values.Count(t => t.Topic == topic) == 0)
-                {
-                    await Task.WhenAll(Routers.Select(r => r.LeaveTopicAsync(topic, CancellationToken.None))).ConfigureAwait(false);
-                }
-            });
-#pragma warning restore VSTHRD101 
+		/// <summary>
+		///   Creates a message for the topic and data.
+		/// </summary>
+		/// <param name="topic">
+		///   The topic name/id.
+		/// </param>
+		/// <param name="data">
+		///   The payload of message.
+		/// </param>
+		/// <returns>
+		///   A unique published message.
+		/// </returns>
+		/// <remarks>
+		///   The <see cref="PublishedMessage.SequenceNumber"/> is a monitonically
+		///   increasing unsigned long.
+		/// </remarks>
+		public PublishedMessage CreateMessage(string topic, byte[] data)
+		{
+			var next = Interlocked.Increment(ref nextSequenceNumber);
+			var seqno = BitConverter.GetBytes(next);
+			if (BitConverter.IsLittleEndian)
+			{
+				seqno = seqno.Reverse().ToArray();
+			}
 
-            // Tell routers if first time.
-            if (topicHandlers.Values.Count(t => t.Topic == topic) == 1)
-            {
-                await Task.WhenAll(Routers.Select(r => r.JoinTopicAsync(topic, CancellationToken.None))).ConfigureAwait(false);
-            }
-        }
+			return new PublishedMessage
+			{
+				Topics = new string[] { topic },
+				Sender = LocalPeer,
+				SequenceNumber = seqno,
+				DataBytes = data
+			};
+		}
 
-        /// <summary>
-        ///   Invoked when a router gets a message.
-        /// </summary>
-        /// <param name="sender">
-        ///   The <see cref="IMessageRouter"/>.
-        /// </param>
-        /// <param name="msg">
-        ///   The message.
-        /// </param>
-        /// <remarks>
-        ///   Invokes any topic handlers and publishes the messages on the other routers.
-        /// </remarks>
-        void Router_MessageReceived(object sender, PublishedMessage msg)
-        {
-            ++MesssagesReceived;
+		/// <inheritdoc />
+		public Task<IEnumerable<string>> SubscribedTopicsAsync(CancellationToken cancel = default)
+		{
+			cancellationTokenSource?.Token.ThrowIfCancellationRequested();
 
-            // Check for duplicate message.
-            if (tracker.RecentlySeen(msg.MessageId))
-            {
-                ++DuplicateMesssagesReceived;
-                return;
-            }
+			var topics = topicHandlers.Values
+				.Select(t => t.Topic)
+				.Distinct();
+			return Task.FromResult(topics);
+		}
 
-            // Call local topic handlers.
-            var handlers = topicHandlers.Values
-                .Where(th => msg.Topics.Contains(th.Topic));
-            foreach (var handler in handlers)
-            {
-                try
-                {
-                    handler.Handler(msg);
-                }
-                catch (Exception e)
-                {
-                    log.Error($"Topic handler for '{handler.Topic}' failed.", e);
-                }
-            }
+		/// <inheritdoc />
+		public Task<IEnumerable<Peer>> PeersAsync(string topic = null, CancellationToken cancel = default)
+		{
+			cancellationTokenSource?.Token.ThrowIfCancellationRequested();
 
-            // Tell other message routers.
-            _ = Task.WhenAll(Routers
-                .Where(r => r != sender)
-                .Select(r => r.PublishAsync(msg, CancellationToken.None))
-            );
-        }
+			var peers = Routers
+				.SelectMany(r => r.InterestedPeers(topic))
+				.Distinct();
+			return Task.FromResult(peers);
+		}
 
-    }
+		/// <inheritdoc />
+		public Task PublishAsync(string topic, string message, CancellationToken cancel = default) =>
+			PublishAsync(topic, Encoding.UTF8.GetBytes(message), cancel);
+
+		/// <inheritdoc />
+		public async Task PublishAsync(string topic, Stream message, CancellationToken cancel = default)
+		{
+			cancellationTokenSource?.Token.ThrowIfCancellationRequested();
+
+			using (var ms = new MemoryStream())
+			{
+				await message.CopyToAsync(ms);
+				await PublishAsync(topic, ms.ToArray(), cancel);
+			}
+		}
+
+		/// <inheritdoc />
+		public async Task PublishAsync(string topic, byte[] message, CancellationToken cancel = default)
+		{
+			cancellationTokenSource?.Token.ThrowIfCancellationRequested();
+
+			var msg = CreateMessage(topic, message);
+			++MesssagesPublished;
+			await Task.WhenAll(Routers.Select(r => r.PublishAsync(msg, cancel)));
+		}
+
+		/// <inheritdoc />
+		public async Task SubscribeAsync(string topic, Action<IPublishedMessage> handler, CancellationToken cancellationToken)
+		{
+			cancellationTokenSource?.Token.ThrowIfCancellationRequested();
+
+			var topicHandler = new TopicHandler { Topic = topic, Handler = handler };
+			_ = topicHandlers.TryAdd(topicHandler, topicHandler);
+
+			// TODO: need a better way.
+#pragma warning disable VSTHRD101
+			_ = cancellationToken.Register(async () =>
+			{
+				_ = topicHandlers.TryRemove(topicHandler, out _);
+				if (topicHandlers.Values.Count(t => t.Topic == topic) == 0)
+				{
+					await Task.WhenAll(Routers.Select(r => r.LeaveTopicAsync(topic, CancellationToken.None))).ConfigureAwait(false);
+				}
+			});
+#pragma warning restore VSTHRD101
+
+			// Tell routers if first time.
+			if (topicHandlers.Values.Count(t => t.Topic == topic) == 1)
+			{
+				await Task.WhenAll(Routers.Select(r => r.JoinTopicAsync(topic, CancellationToken.None))).ConfigureAwait(false);
+			}
+		}
+
+		/// <summary>
+		///   Invoked when a router gets a message.
+		/// </summary>
+		/// <param name="messageRouter">The message router.</param>
+		/// <param name="msg">
+		///   The message.
+		/// </param>
+		/// <remarks>
+		///   Invokes any topic handlers and publishes the messages on the other routers.
+		/// </remarks>
+		private async Task RouterMessageReceivedAsync(IMessageRouter messageRouter, PublishedMessage msg)
+		{
+			cancellationTokenSource?.Token.ThrowIfCancellationRequested();
+
+			++MesssagesReceived;
+
+			// Check for duplicate message.
+			if (tracker.RecentlySeen(msg.MessageId))
+			{
+				++DuplicateMesssagesReceived;
+				return;
+			}
+
+			// Call local topic handlers.
+			var handlers = topicHandlers.Values
+				.Where(th => msg.Topics.Contains(th.Topic));
+			foreach (var handler in handlers)
+			{
+				try
+				{
+					handler.Handler(msg);
+				}
+				catch (Exception e)
+				{
+					_logger.LogError(e, "Topic handler for '{HandlerTopic}' failed.", handler.Topic);
+				}
+			}
+
+			// Tell other message routers.
+			await Task.WhenAll(
+				Routers
+					.Where(r => r != messageRouter)
+					.Select(r => r.PublishAsync(msg, CancellationToken.None)));
+		}
+	}
 }

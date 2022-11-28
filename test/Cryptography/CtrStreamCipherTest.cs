@@ -1,4 +1,6 @@
-﻿using Ipfs;
+﻿namespace PeerTalk.Cryptography;
+
+using Ipfs;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System;
 using System.Linq;
@@ -14,9 +16,7 @@ using System.Text;
 using Org.BouncyCastle.Crypto;
 using Org.BouncyCastle.Utilities;
 
-namespace PeerTalk.Cryptography
-{
-    [TestClass]
+[TestClass]
     public class CtrStreamCipherTest
     {
 
@@ -83,6 +83,4 @@ namespace PeerTalk.Cryptography
             CollectionAssert.AreEqual(expected2, actual);
         }
     }
-
-}
  

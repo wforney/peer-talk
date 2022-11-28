@@ -1,14 +1,7 @@
-﻿using Ipfs;
-using ProtoBuf;
-using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-
-namespace PeerTalk.PubSub
+﻿namespace PeerTalk.PubSub
 {
+    using ProtoBuf;
+
     /// <summary>
     ///   The PubSub message exchanged between peers.
     /// </summary>
@@ -52,5 +45,4 @@ namespace PeerTalk.PubSub
         [ProtoMember(2)]
         public string Topic;
     }
-
 }

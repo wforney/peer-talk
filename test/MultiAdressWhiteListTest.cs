@@ -1,25 +1,25 @@
-﻿using Ipfs;
+﻿namespace PeerTalk;
+
+using Ipfs;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace PeerTalk
-{
-    [TestClass]
+[TestClass]
     public class MultiAddressWhiteListTest
     {
-        MultiAddress a = "/ipfs/QmSoLMeWqB7YGVLJN3pNLQpmmEk35v6wYtsMGLzSr5QBU3";
-        MultiAddress a1 = "/ip4/127.0.0.1/ipfs/QmSoLMeWqB7YGVLJN3pNLQpmmEk35v6wYtsMGLzSr5QBU3";
-        MultiAddress b = "/p2p/QmSoLMeWqB7YGVLJN3pNLQpmmEk35v6wYtsMGLzSr5QBU3";
-        MultiAddress c = "/ipfs/QmSoLV4Bbm51jM9C4gDYZQ9Cy3U6aXMJDAbzgu2fzaDs64";
-        MultiAddress d = "/p2p/QmSoLV4Bbm51jM9C4gDYZQ9Cy3U6aXMJDAbzgu2fzaDs64";
+	private MultiAddress a = "/ipfs/QmSoLMeWqB7YGVLJN3pNLQpmmEk35v6wYtsMGLzSr5QBU3";
+	private MultiAddress a1 = "/ip4/127.0.0.1/ipfs/QmSoLMeWqB7YGVLJN3pNLQpmmEk35v6wYtsMGLzSr5QBU3";
+	private MultiAddress b = "/p2p/QmSoLMeWqB7YGVLJN3pNLQpmmEk35v6wYtsMGLzSr5QBU3";
+	private MultiAddress c = "/ipfs/QmSoLV4Bbm51jM9C4gDYZQ9Cy3U6aXMJDAbzgu2fzaDs64";
+	private MultiAddress d = "/p2p/QmSoLV4Bbm51jM9C4gDYZQ9Cy3U6aXMJDAbzgu2fzaDs64";
 
         [TestMethod]
         public void Allowed()
         {
-            var policy = new MultiAddressWhiteList();
+            var policy = new MultiAddressAllowList();
             policy.Add(a);
             policy.Add(b);
             Assert.IsTrue(policy.IsAllowed(a));
@@ -32,7 +32,7 @@ namespace PeerTalk
         [TestMethod]
         public void Allowed_Alias()
         {
-            var policy = new MultiAddressWhiteList();
+            var policy = new MultiAddressAllowList();
             policy.Add(a);
             Assert.IsTrue(policy.IsAllowed(a));
             Assert.IsTrue(policy.IsAllowed(a1));
@@ -44,7 +44,7 @@ namespace PeerTalk
         [TestMethod]
         public void Empty()
         {
-            var policy = new MultiAddressWhiteList();
+            var policy = new MultiAddressAllowList();
             Assert.IsTrue(policy.IsAllowed(a));
         }
 
@@ -54,7 +54,7 @@ namespace PeerTalk
             MultiAddress a = "/ip4/127.0.0.1";
             MultiAddress b = "/ip4/127.0.0.2";
 
-            var policy = new MultiAddressWhiteList();
+            var policy = new MultiAddressAllowList();
             Assert.IsFalse(policy.IsReadOnly);
             Assert.AreEqual(0, policy.Count);
             Assert.IsFalse(policy.Contains(a));
@@ -95,4 +95,3 @@ namespace PeerTalk
             Assert.IsFalse(policy.Contains(b));
         }
     }
-}

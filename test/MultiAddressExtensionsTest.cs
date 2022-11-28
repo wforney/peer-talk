@@ -1,4 +1,6 @@
-﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
+﻿namespace PeerTalk;
+
+using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Ipfs;
 using System;
 using System.Linq;
@@ -6,9 +8,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Net.Sockets;
 
-namespace PeerTalk
-{
-    [TestClass]
+[TestClass]
     public class MultiAddressExtensionsTest
     {
         [TestMethod]
@@ -71,4 +71,3 @@ namespace PeerTalk
         }
 
     }
-}

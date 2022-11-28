@@ -1,55 +1,54 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-
-namespace PeerTalk.Protocols
+﻿namespace PeerTalk.Protocols
 {
-    /// <summary>
-    ///   Metadata on <see cref="IPeerProtocol"/>.
-    /// </summary>
-    public static class ProtocolRegistry
-    {
-        /// <summary>
-        ///   All the peer protocols.
-        /// </summary>
-        /// <remarks>
-        ///   The key is the name and version of the peer protocol, like "/multiselect/1.0.0".
-        ///   The value is a Func that returns an new instance of the peer protocol.
-        /// </remarks>
-        public static Dictionary<string, Func<IPeerProtocol>> Protocols;
+	using Microsoft.Extensions.DependencyInjection;
+	using System;
+	using System.Collections.Generic;
 
-        static ProtocolRegistry()
-        {
-            Protocols = new Dictionary<string, Func<IPeerProtocol>>();
-            Register<Multistream1>();
-            Register<SecureCommunication.Secio1>();
-            Register<Plaintext1>();
-            Register<Identify1>();
-            Register<Mplex67>();
-        }
+	/// <summary>
+	/// Metadata on <see cref="IPeerProtocol" />.
+	/// </summary>
+	public class ProtocolRegistry
+	{
+		private readonly IServiceProvider _serviceProvider;
 
-        /// <summary>
-        ///   Register a new protocol.
-        /// </summary>
-        /// <typeparam name="T"></typeparam>
-        public static void Register<T>() where T: IPeerProtocol, new()
-        {
-            var p = new T();
-            Protocols.Add(p.ToString(), () => new T());
-        }
+		/// <summary>
+		/// Initializes a new instance of the <see cref="ProtocolRegistry" /> class.
+		/// </summary>
+		/// <param name="serviceProvider">The service provider.</param>
+		/// <exception cref="ArgumentNullException">serviceProvider</exception>
+		public ProtocolRegistry(IServiceProvider serviceProvider)
+		{
+			_serviceProvider = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
+			Register<Multistream1>();
+			Register<SecureCommunication.Secio1>();
+			Register<Plaintext1>();
+			Register<Identify1>();
+			Register<Mplex67>();
+		}
 
-        /// <summary>
-        ///   Remove the specified protocol.
-        /// </summary>
-        /// <param name="protocolName">
-        ///   The protocol name to remove.
-        /// </param>
-        public static void Deregister(string protocolName)
-        {
-            Protocols.Remove(protocolName);
-        }
+		/// <summary>
+		/// All the peer protocols.
+		/// </summary>
+		/// <remarks>
+		/// The key is the name and version of the peer protocol, like "/multiselect/1.0.0". The
+		/// value is a Func that returns an new instance of the peer protocol.
+		/// </remarks>
+		public Dictionary<string, Func<IPeerProtocol>> Protocols { get; } = new Dictionary<string, Func<IPeerProtocol>>();
 
-    }
+		/// <summary>
+		/// Remove the specified protocol.
+		/// </summary>
+		/// <param name="protocolName">The protocol name to remove.</param>
+		public void Deregister(string protocolName) => Protocols.Remove(protocolName);
+
+		/// <summary>
+		/// Register a new protocol.
+		/// </summary>
+		/// <typeparam name="T"></typeparam>
+		public void Register<T>() where T : IPeerProtocol
+		{
+			var p = _serviceProvider.GetRequiredService<T>();
+			Protocols.Add(p.ToString(), () => _serviceProvider.GetRequiredService<T>());
+		}
+	}
 }

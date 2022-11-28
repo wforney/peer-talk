@@ -1,4 +1,6 @@
-﻿using Ipfs;
+﻿namespace PeerTalk.Cryptography;
+
+using Ipfs;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System;
 using System.Linq;
@@ -7,9 +9,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Collections.Generic;
 
-namespace PeerTalk.Cryptography
-{
-    [TestClass]
+[TestClass]
     public class StretchedKeyTest
     {
         // from https://github.com/libp2p/js-libp2p-crypto/blob/ad478454d86787fffed30730605d6c76a36b4d61/test/fixtures/go-stretch-key.js
@@ -32,4 +32,3 @@ namespace PeerTalk.Cryptography
             CollectionAssert.AreEqual(new byte[] { 3, 229, 77, 212, 241, 217, 23, 113, 220, 126, 38, 255, 18, 117, 108, 205, 198, 89, 1, 236 }, k2.MacKey);
         }
     }
-}

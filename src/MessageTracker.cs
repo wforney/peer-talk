@@ -1,12 +1,9 @@
-﻿using System;
-using System.Collections.Concurrent;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-
-namespace PeerTalk
+﻿namespace PeerTalk
 {
+    using System;
+    using System.Collections.Concurrent;
+    using System.Linq;
+
     /// <summary>
     ///   Maintains a timed cache of message IDs.
     /// </summary>
@@ -22,7 +19,7 @@ namespace PeerTalk
         /// <remarks>
         ///   The key is the ID of a message.  The value is the expiry date.
         /// </remarks>
-        ConcurrentDictionary<string, DateTime> messages = new ConcurrentDictionary<string, DateTime>();
+        private readonly ConcurrentDictionary<string, DateTime> messages = new ConcurrentDictionary<string, DateTime>();
 
         /// <summary>
         ///   The definition of recent.
@@ -53,7 +50,7 @@ namespace PeerTalk
             Prune(now.Value);
 
             var seen = false;
-            messages.AddOrUpdate(
+            _ = messages.AddOrUpdate(
                 id,
                 (key) => now.Value + Recent,
                 (key, expiry) => { seen = true; return now.Value + Recent; });
@@ -75,7 +72,7 @@ namespace PeerTalk
                 .ToArray();
             foreach (var key in expired)
             {
-                messages.TryRemove(key, out DateTime _);
+                _ = messages.TryRemove(key, out _);
             }
         }
     }

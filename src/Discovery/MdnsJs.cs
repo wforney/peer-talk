@@ -1,15 +1,13 @@
-﻿using Common.Logging;
-using Ipfs;
-using Makaretu.Dns;
-using System;
-using System.Collections.Generic;
-using System.Collections.Concurrent;
-using System.Linq;
-using System.Threading.Tasks;
-using System.Net;
-
-namespace PeerTalk.Discovery
+﻿namespace PeerTalk.Discovery
 {
+    using Ipfs;
+    using Makaretu.Dns;
+    using Microsoft.Extensions.Logging;
+    using SharedCode.Notifications;
+    using System.Collections.Generic;
+    using System.Linq;
+    using System.Net;
+
     /// <summary>
     ///   Discovers peers using Multicast DNS according to
     ///   js-ipfs v0.32.3
@@ -20,7 +18,7 @@ namespace PeerTalk.Discovery
         ///   Creates a new instance of the class.  Sets the <see cref="Mdns.ServiceName"/>
         ///   to "ipfs".
         /// </summary>
-        public MdnsJs()
+        public MdnsJs(ILogger<MdnsJs> logger, INotificationService notificationService) : base(logger, notificationService)
         {
             ServiceName = "ipfs";
         }
@@ -42,6 +40,7 @@ namespace PeerTalk.Discovery
             {
                 return null;
             }
+
             var ipAddresses = addresses
                 .Select(a => IPAddress.Parse(a.Protocols.First().Value));
 
@@ -58,7 +57,7 @@ namespace PeerTalk.Discovery
                 port: ushort.Parse(tcpPort),
                 addresses: ipAddresses
             );
-            profile.Resources.RemoveAll(r => r.Type == DnsType.TXT);
+            _ = profile.Resources.RemoveAll(r => r.Type == DnsType.TXT);
             var txt = new TXTRecord { Name = profile.FullyQualifiedName };
             txt.Strings.Add(profile.InstanceName.ToString());
             profile.Resources.Add(txt);
@@ -87,6 +86,7 @@ namespace PeerTalk.Discovery
                 {
                     yield return new MultiAddress($"/ip4/{a.Address}/tcp/{srv.Port}/ipfs/{id}");
                 }
+
                 var aaaaRecords = message.Answers
                     .OfType<AAAARecord>()
                     .Where(a => a.Name == name || a.Name == srv.Target);

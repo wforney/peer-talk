@@ -1,295 +1,301 @@
-﻿using Common.Logging;
-using Ipfs;
-using PeerTalk.Protocols;
-using ProtoBuf;
-using Semver;
-using System;
-using System.Collections.Generic;
-using System.Collections.Concurrent;
-using System.IO;
-using System.Linq;
-using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
-
-namespace PeerTalk.PubSub
+﻿namespace PeerTalk.PubSub
 {
-    /// <summary>
-    ///   The original flood sub router.
-    /// </summary>
-    public class FloodRouter : IPeerProtocol, IMessageRouter
-    {
-        static ILog log = LogManager.GetLogger(typeof(FloodRouter));
+	using Ipfs;
+	using Microsoft.Extensions.Logging;
+	using PeerTalk.Protocols;
+	using ProtoBuf;
+	using Semver;
+	using SharedCode.Notifications;
+	using System;
+	using System.Collections.Concurrent;
+	using System.Collections.Generic;
+	using System.IO;
+	using System.Linq;
+	using System.Threading;
+	using System.Threading.Tasks;
 
-        MessageTracker tracker = new MessageTracker();
-        ConcurrentDictionary<string, string> localTopics = new ConcurrentDictionary<string, string>();
+	/// <summary>
+	/// The original flood sub router.
+	/// </summary>
+	public class FloodRouter : IPeerProtocol, IMessageRouter
+	{
+		private readonly ILogger<FloodRouter> _logger;
+		private readonly INotificationService _notificationService;
+		private readonly ConcurrentDictionary<string, string> localTopics = new ConcurrentDictionary<string, string>();
+		private readonly MessageTracker tracker = new MessageTracker();
 
-        /// <summary>
-        ///   The topics of interest of other peers.
-        /// </summary>
-        public TopicManager RemoteTopics { get; set; } = new TopicManager();
+		private bool _started;
+		private IDisposable _swarmConnectionEstablished;
+		private IDisposable _swarmPeerDisconnected;
 
-        /// <inheritdoc />
-        public event EventHandler<PublishedMessage> MessageReceived;
+		/// <summary>
+		/// Initializes a new instance of the <see cref="FloodRouter"/> class.
+		/// </summary>
+		/// <param name="logger">The logger.</param>
+		/// <param name="notificationService">The notification service.</param>
+		/// <exception cref="ArgumentNullException">logger</exception>
+		/// <exception cref="ArgumentNullException">notificationService</exception>
+		public FloodRouter(ILogger<FloodRouter> logger, INotificationService notificationService)
+		{
+			_logger = logger ?? throw new ArgumentNullException(nameof(logger));
+			_notificationService = notificationService ?? throw new ArgumentNullException(nameof(notificationService));
+		}
 
-        /// <inheritdoc />
-        public string Name { get; } = "floodsub";
+		/// <inheritdoc />
+		public string Name { get; } = "floodsub";
 
-        /// <inheritdoc />
-        public SemVersion Version { get; } = new SemVersion(1, 0);
+		/// <summary>
+		/// The topics of interest of other peers.
+		/// </summary>
+		public TopicManager RemoteTopics { get; set; } = new TopicManager();
 
-        /// <inheritdoc />
-        public override string ToString()
-        {
-            return $"/{Name}/{Version}";
-        }
+		/// <summary>
+		/// Provides access to other peers.
+		/// </summary>
+		public Swarm Swarm { get; set; }
 
-        /// <summary>
-        ///   Provides access to other peers.
-        /// </summary>
-        public Swarm Swarm { get; set; }
+		/// <inheritdoc />
+		public SemVersion Version { get; } = new SemVersion(1, 0);
 
-        /// <inheritdoc />
-        public Task StartAsync()
-        {
-            log.Debug("Starting");
+		/// <inheritdoc />
+		public IEnumerable<Peer> InterestedPeers(string topic) => RemoteTopics.GetPeers(topic);
 
-            Swarm.AddProtocol(this);
-            Swarm.ConnectionEstablished += Swarm_ConnectionEstablished;
-            Swarm.PeerDisconnected += Swarm_PeerDisconnected;
+		/// <inheritdoc />
+		public async Task JoinTopicAsync(string topic, CancellationToken cancel)
+		{
+			_ = localTopics.TryAdd(topic, topic);
+			var msg = new PubSubMessage
+			{
+				Subscriptions = new Subscription[]
+				{
+					new Subscription
+					{
+						Topic = topic,
+						Subscribe = true
+					}
+				}
+			};
+			try
+			{
+				var peers = Swarm.KnownPeers.Where(p => p.ConnectedAddress != null);
+				await SendAsync(msg, peers, cancel).ConfigureAwait(false);
+			}
+			catch (Exception e)
+			{
+				_logger.LogWarning(e, "Join topic failed.");
+			}
+		}
 
-            return Task.CompletedTask;
-        }
+		/// <inheritdoc />
+		public async Task LeaveTopicAsync(string topic, CancellationToken cancel)
+		{
+			_ = localTopics.TryRemove(topic, out _);
+			var msg = new PubSubMessage
+			{
+				Subscriptions = new Subscription[]
+				{
+					new Subscription
+					{
+						Topic = topic,
+						Subscribe = false
+					}
+				}
+			};
+			try
+			{
+				var peers = Swarm.KnownPeers.Where(p => p.ConnectedAddress != null);
+				await SendAsync(msg, peers, cancel).ConfigureAwait(false);
+			}
+			catch (Exception e)
+			{
+				_logger.LogWarning(e, "Leave topic failed.");
+			}
+		}
 
-        /// <inheritdoc />
-        public Task StopAsync()
-        {
-            log.Debug("Stopping");
+		/// <inheritdoc />
+		public async Task ProcessMessageAsync(PeerConnection connection, Stream stream, CancellationToken cancel = default)
+		{
+			while (true)
+			{
+				var request = await ProtoBufHelper.ReadMessageAsync<PubSubMessage>(stream, cancel).ConfigureAwait(false); ;
+				_logger.LogDebug("got message from {ConnectionRemotePeer}", connection.RemotePeer);
 
-            Swarm.ConnectionEstablished -= Swarm_ConnectionEstablished;
-            Swarm.PeerDisconnected -= Swarm_PeerDisconnected;
-            Swarm.RemoveProtocol(this);
-            RemoteTopics.Clear();
-            localTopics.Clear();
+				if (request.Subscriptions != null)
+				{
+					foreach (var sub in request.Subscriptions)
+					{
+						ProcessSubscription(sub, connection.RemotePeer);
+					}
+				}
 
-            return Task.CompletedTask;
-        }
-        /// <inheritdoc />
-        public async Task ProcessMessageAsync(PeerConnection connection, Stream stream, CancellationToken cancel = default(CancellationToken))
-        {
-            while (true)
-            {
-                var request = await ProtoBufHelper.ReadMessageAsync<PubSubMessage>(stream, cancel).ConfigureAwait(false); ;
-                log.Debug($"got message from {connection.RemotePeer}");
+				if (request.PublishedMessages != null)
+				{
+					foreach (var msg in request.PublishedMessages)
+					{
+						_logger.LogDebug("Message for '{Topics}' fowarded by {ConnectionRemotePeer}", string.Join(", ", msg.Topics), connection.RemotePeer);
+						msg.Forwarder = connection.RemotePeer;
+						_notificationService.Publish(new MessageReceived(this, msg));
+						await PublishAsync(msg, cancel).ConfigureAwait(false);
+					}
+				}
+			}
+		}
 
-                if (request.Subscriptions != null)
-                {
-                    foreach (var sub in request.Subscriptions)
-                    {
-                        ProcessSubscription(sub, connection.RemotePeer);
-                    }
-                }
+		/// <summary>
+		/// Process a subscription request from another peer.
+		/// </summary>
+		/// <param name="sub">The subscription request.</param>
+		/// <param name="remote">The remote <see cref="Peer" />.</param>
+		/// <seealso cref="RemoteTopics" />
+		/// <remarks>Maintains the <see cref="RemoteTopics" />.</remarks>
+		public void ProcessSubscription(Subscription sub, Peer remote)
+		{
+			if (sub.Subscribe)
+			{
+				_logger.LogDebug("Subscribe '{SubTopic}' by {Remote}", sub.Topic, remote);
+				RemoteTopics.AddInterest(sub.Topic, remote);
+			}
+			else
+			{
+				_logger.LogDebug("Unsubscribe '{SubTopic}' by {Remote}", sub.Topic, remote);
+				RemoteTopics.RemoveInterest(sub.Topic, remote);
+			}
+		}
 
-                if (request.PublishedMessages != null)
-                {
-                    foreach (var msg in request.PublishedMessages)
-                    {
-                        log.Debug($"Message for '{String.Join(", ", msg.Topics)}' fowarded by {connection.RemotePeer}");
-                        msg.Forwarder = connection.RemotePeer;
-                        MessageReceived?.Invoke(this, msg);
-                        await PublishAsync(msg, cancel).ConfigureAwait(false);
-                    }
-                }
-            }
-        }
+		/// <inheritdoc />
+		public Task PublishAsync(PublishedMessage message, CancellationToken cancel)
+		{
+			if (tracker.RecentlySeen(message.MessageId))
+			{
+				return Task.CompletedTask;
+			}
 
-        /// <summary>
-        ///   Process a subscription request from another peer.
-        /// </summary>
-        /// <param name="sub">
-        ///   The subscription request.
-        /// </param>
-        /// <param name="remote">
-        ///   The remote <see cref="Peer"/>.
-        /// </param>
-        /// <seealso cref="RemoteTopics"/>
-        /// <remarks>
-        ///   Maintains the <see cref="RemoteTopics"/>.
-        /// </remarks>
-        public void ProcessSubscription(Subscription sub, Peer remote)
-        {
-            if (sub.Subscribe)
-            {
-                log.Debug($"Subscribe '{sub.Topic}' by {remote}");
-                RemoteTopics.AddInterest(sub.Topic, remote);
-            }
-            else
-            {
-                log.Debug($"Unsubscribe '{sub.Topic}' by {remote}");
-                RemoteTopics.RemoveInterest(sub.Topic, remote);
-            }
-        }
+			// Find a set of peers that are interested in the topic(s). Exclude author and sender
+			var peers = message.Topics
+				.SelectMany(topic => RemoteTopics.GetPeers(topic))
+				.Where(peer => peer != message.Sender)
+				.Where(peer => peer != message.Forwarder);
 
-        /// <inheritdoc />
-        public IEnumerable<Peer> InterestedPeers(string topic)
-        {
-            return RemoteTopics.GetPeers(topic);
-        }
+			// Forward the message.
+			var forward = new PubSubMessage
+			{
+				PublishedMessages = new PublishedMessage[] { message }
+			};
 
-        /// <inheritdoc />
-        public async Task JoinTopicAsync(string topic, CancellationToken cancel)
-        {
-            localTopics.TryAdd(topic, topic);
-            var msg = new PubSubMessage
-            {
-                Subscriptions = new Subscription[]
-                {
-                    new Subscription
-                    {
-                        Topic = topic,
-                        Subscribe = true
-                    }
-                }
-            };
-            try
-            {
-                var peers = Swarm.KnownPeers.Where(p => p.ConnectedAddress != null);
-                await SendAsync(msg, peers, cancel).ConfigureAwait(false);
-            }
-            catch (Exception e)
-            {
-                log.Warn("Join topic failed.", e);
-            }
-        }
+			return SendAsync(forward, peers, cancel);
+		}
 
-        /// <inheritdoc />
-        public async Task LeaveTopicAsync(string topic, CancellationToken cancel)
-        {
-            localTopics.TryRemove(topic, out _);
-            var msg = new PubSubMessage
-            {
-                Subscriptions = new Subscription[]
-                {
-                    new Subscription
-                    {
-                        Topic = topic,
-                        Subscribe = false
-                    }
-                }
-            };
-            try
-            {
-                var peers = Swarm.KnownPeers.Where(p => p.ConnectedAddress != null);
-                await SendAsync(msg, peers, cancel).ConfigureAwait(false);
-            }
-            catch (Exception e)
-            {
-                log.Warn("Leave topic failed.", e);
-            }
-        }
+		/// <inheritdoc />
+		public Task StartAsync()
+		{
+			if (_started)
+			{
+				return Task.CompletedTask;
+			}
 
-        /// <inheritdoc />
-        public Task PublishAsync(PublishedMessage message, CancellationToken cancel)
-        {
-            if (tracker.RecentlySeen(message.MessageId))
-                return Task.CompletedTask;
+			_logger.LogDebug("Starting");
 
-            // Find a set of peers that are interested in the topic(s).
-            // Exclude author and sender
-            var peers = message.Topics
-                .SelectMany(topic => RemoteTopics.GetPeers(topic))
-                .Where(peer => peer != message.Sender)
-                .Where(peer => peer != message.Forwarder);
+			_started = true;
+			Swarm.AddProtocol(this);
+			_swarmConnectionEstablished = _notificationService.Subscribe<Swarm.ConnectionEstablished>(m => SwarmConnectionEstablishedAsync(m.PeerConnection));
+			_swarmPeerDisconnected = _notificationService.Subscribe<Swarm.PeerDisconnected>(m => SwarmPeerDisconnected(m.Peer));
 
-            // Forward the message.
-            var forward = new PubSubMessage
-            {
-                PublishedMessages = new PublishedMessage[] { message }
-            };
+			return Task.CompletedTask;
+		}
 
-            return SendAsync(forward, peers, cancel);
-        }
+		/// <inheritdoc />
+		public Task StopAsync()
+		{
+			_logger.LogDebug("Stopping");
 
-        Task SendAsync(PubSubMessage msg, IEnumerable<Peer> peers, CancellationToken cancel)
-        {
-            // Get binary representation
-            byte[] bin;
-            using (var ms = new MemoryStream())
-            {
-                Serializer.SerializeWithLengthPrefix(ms, msg, PrefixStyle.Base128);
-                bin = ms.ToArray();
-            }
+			_swarmConnectionEstablished?.Dispose();
+			_swarmConnectionEstablished = null;
+			_swarmPeerDisconnected?.Dispose();
+			_swarmPeerDisconnected = null;
 
-            return Task.WhenAll(peers.Select(p => SendAsync(bin, p, cancel)));
-        }
+			Swarm.RemoveProtocol(this);
+			RemoteTopics.Clear();
+			localTopics.Clear();
 
-        async Task SendAsync(byte[] message, Peer peer, CancellationToken cancel)
-        {
-            try
-            {
-                using (var stream = await Swarm.DialAsync(peer, this.ToString(), cancel).ConfigureAwait(false))
-                {
-                    await stream.WriteAsync(message, 0, message.Length, cancel).ConfigureAwait(false);
-                    await stream.FlushAsync(cancel).ConfigureAwait(false);
-                }
-                log.Debug($"sending message to {peer}");
-                return;
-            }
-            catch (Exception e)
-            {
-                log.Debug($"{peer} refused pubsub message.", e);
-            }
-        }
+			_started = false;
+			return Task.CompletedTask;
+		}
 
-#pragma warning disable VSTHRD100 // Avoid async void methods
-        /// <summary>
-        ///   Raised when a connection is established to a remote peer.
-        /// </summary>
-        /// <param name="sender"></param>
-        /// <param name="connection"></param>
-        /// <remarks>
-        ///   Sends the hello message to the remote peer.  The message contains
-        ///   all topics that are of interest to the local peer.
-        /// </remarks>
-        async void Swarm_ConnectionEstablished(object sender, PeerConnection connection)
-#pragma warning restore VSTHRD100 // Avoid async void methods
-        {
-            if (localTopics.Count == 0)
-                return;
+		/// <inheritdoc />
+		public override string ToString() => $"/{Name}/{Version}";
 
-            try
-            {
-                var hello = new PubSubMessage
-                {
-                    Subscriptions = localTopics.Values
-                        .Select(topic => new Subscription
-                        {
-                            Subscribe = true,
-                            Topic = topic
-                        })
-                        .ToArray()
-                };
-                await SendAsync(hello, new Peer[] { connection.RemotePeer }, CancellationToken.None).ConfigureAwait(false);
-            }
-            catch (Exception e)
-            {
-                log.Warn("Sending hello message failed", e);
-            }
-        }
+		private Task SendAsync(PubSubMessage msg, IEnumerable<Peer> peers, CancellationToken cancel)
+		{
+			// Get binary representation
+			byte[] bin;
+			using (var ms = new MemoryStream())
+			{
+				Serializer.SerializeWithLengthPrefix(ms, msg, PrefixStyle.Base128);
+				bin = ms.ToArray();
+			}
 
-        /// <summary>
-        ///   Raised when the peer has no more connections.
-        /// </summary>
-        /// <param name="sender"></param>
-        /// <param name="peer"></param>
-        /// <remarks>
-        ///   Removes the <paramref name="peer"/> from the
-        ///   <see cref="RemoteTopics"/>.
-        /// </remarks>
-        void Swarm_PeerDisconnected(object sender, Peer peer)
-        {
-            RemoteTopics.Clear(peer);
-        }
+			return Task.WhenAll(peers.Select(p => SendAsync(bin, p, cancel)));
+		}
 
-    }
+		private async Task SendAsync(byte[] message, Peer peer, CancellationToken cancel)
+		{
+			try
+			{
+				using (var stream = await Swarm.DialAsync(peer, this.ToString(), cancel).ConfigureAwait(false))
+				{
+					await stream.WriteAsync(message, 0, message.Length, cancel).ConfigureAwait(false);
+					await stream.FlushAsync(cancel).ConfigureAwait(false);
+				}
+
+				_logger.LogDebug("sending message to {Peer}", peer);
+				return;
+			}
+			catch (Exception e)
+			{
+				_logger.LogDebug(e, "{Peer} refused pubsub message.", peer);
+			}
+		}
+
+		/// <summary>
+		/// Raised when a connection is established to a remote peer.
+		/// </summary>
+		/// <param name="connection">The peer connection.</param>
+		/// <remarks>
+		/// Sends the hello message to the remote peer. The message contains all topics that are of
+		/// interest to the local peer.
+		/// </remarks>
+		private async Task SwarmConnectionEstablishedAsync(PeerConnection connection)
+		{
+			if (localTopics.Count == 0)
+			{
+				return;
+			}
+
+			try
+			{
+				var hello = new PubSubMessage
+				{
+					Subscriptions = localTopics.Values
+						.Select(topic => new Subscription
+						{
+							Subscribe = true,
+							Topic = topic
+						})
+						.ToArray()
+				};
+				await SendAsync(hello, new Peer[] { connection.RemotePeer }, CancellationToken.None).ConfigureAwait(false);
+			}
+			catch (Exception e)
+			{
+				_logger.LogWarning(e, "Sending hello message failed");
+			}
+		}
+
+		/// <summary>
+		/// Raised when the peer has no more connections.
+		/// </summary>
+		/// <param name="peer">The peer.</param>
+		/// <remarks>Removes the <paramref name="peer" /> from the <see cref="RemoteTopics" />.</remarks>
+		private void SwarmPeerDisconnected(Peer peer) => RemoteTopics.Clear(peer);
+	}
 }

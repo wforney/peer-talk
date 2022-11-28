@@ -1,13 +1,13 @@
-﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
+﻿namespace PeerTalk.SecureCommunication;
+
+using Microsoft.VisualStudio.TestTools.UnitTesting;
 using PeerTalk.Cryptography;
 using System;
 using System.Linq;
 using System.IO;
 using System.Threading.Tasks;
 
-namespace PeerTalk.SecureCommunication
-{
-    [TestClass]
+[TestClass]
     public class Psk1StreamTest
     {
         [TestMethod]
@@ -72,4 +72,3 @@ namespace PeerTalk.SecureCommunication
             secure.ReadByte();
         }
     }
-}

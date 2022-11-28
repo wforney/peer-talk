@@ -1,12 +1,9 @@
-﻿using Semver;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-
-namespace PeerTalk.Protocols
+﻿namespace PeerTalk.Protocols
 {
+    using Semver;
+    using System;
+    using System.Linq;
+
     /// <summary>
     ///   A name with a semantic version.
     /// </summary>
@@ -26,17 +23,14 @@ namespace PeerTalk.Protocols
         public SemVersion Version { get; set; }
 
         /// <inheritdoc />
-        public override string ToString()
-        {
-            return $"/{Name}/{Version}";
-        }
+        public override string ToString() => $"/{Name}/{Version}";
 
         /// <summary>
-        ///   Parse
+        /// Parses the specified string.
         /// </summary>
-        /// <param name="s"></param>
-        /// <returns></returns>
-        public static VersionedName Parse (string s)
+        /// <param name="s">The string.</param>
+        /// <returns>VersionedName.</returns>
+        public static VersionedName Parse(string s)
         {
             var parts = s.Split('/').Where(p => p.Length > 0).ToArray();
             return new VersionedName
@@ -47,56 +41,30 @@ namespace PeerTalk.Protocols
         }
 
         /// <inheritdoc />
-        public override int GetHashCode()
-        {
-            return ToString().GetHashCode();
-        }
+        public override int GetHashCode() => ToString().GetHashCode();
 
         /// <inheritdoc />
-        public override bool Equals(object obj)
-        {
-            var that = obj as VersionedName;
-            return (that == null)
-                ? false
-                : this.Name == that.Name && this.Version == that.Version;
-        }
+        public override bool Equals(object obj) =>
+            obj is VersionedName that &&
+            this.Name == that.Name &&
+            this.Version == that.Version;
 
         /// <inheritdoc />
-        public bool Equals(VersionedName that)
-        {
-            return this.Name == that.Name && this.Version == that.Version;
-        }
+        public bool Equals(VersionedName that) =>
+            this.Name == that.Name &&
+            this.Version == that.Version;
 
         /// <summary>
         ///   Value equality.
         /// </summary>
-        public static bool operator ==(VersionedName a, VersionedName b)
-        {
-            if (object.ReferenceEquals(a, b)) return true;
-            if (object.ReferenceEquals(a, null)) return false;
-            if (object.ReferenceEquals(b, null)) return false;
-
-            return a.Equals(b);
-        }
+        public static bool operator ==(VersionedName a, VersionedName b) => ReferenceEquals(a, b) || (!(a is null) && !(b is null) && a.Equals(b));
 
         /// <summary>
         ///   Value inequality.
         /// </summary>
-        public static bool operator !=(VersionedName a, VersionedName b)
-        {
-            if (object.ReferenceEquals(a, b)) return false;
-            if (object.ReferenceEquals(a, null)) return true;
-            if (object.ReferenceEquals(b, null)) return true;
-
-            return !a.Equals(b);
-        }
+        public static bool operator !=(VersionedName a, VersionedName b) => !ReferenceEquals(a, b) && (a is null || b is null || !a.Equals(b));
 
         /// <inheritdoc />
-        public int CompareTo(VersionedName that)
-        {
-            if (that == null) return 1;
-            if (this.Name == that.Name) return this.Version.CompareTo(that.Version);
-            return this.Name.CompareTo(that.Name);
-        }
+        public int CompareTo(VersionedName that) => that is null ? 1 : this.Name == that.Name ? this.Version.CompareTo(that.Version) : this.Name.CompareTo(that.Name);
     }
 }

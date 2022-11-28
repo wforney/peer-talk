@@ -1,61 +1,67 @@
-﻿using Common.Logging;
-using Semver;
-using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
-
-namespace PeerTalk.Protocols
+﻿namespace PeerTalk.Protocols
 {
-    /// <summary>
-    ///   A protocol to select other protocols.
-    /// </summary>
-    /// <seealso href="https://github.com/multiformats/multistream-select"/>
-    public class Multistream1 : IPeerProtocol
-    {
-        static ILog log = LogManager.GetLogger(typeof(Multistream1));
+	using Microsoft.Extensions.Logging;
+	using Semver;
+	using System;
+	using System.IO;
+	using System.Threading;
+	using System.Threading.Tasks;
 
-        /// <inheritdoc />
-        public string Name { get; } = "multistream";
+	/// <summary>
+	///   A protocol to select other protocols.
+	/// </summary>
+	/// <seealso href="https://github.com/multiformats/multistream-select"/>
+	public class Multistream1 : IPeerProtocol
+	{
+		private readonly ILogger<Multistream1> _logger;
+		private readonly Message _message;
 
-        /// <inheritdoc />
-        public SemVersion Version { get; } = new SemVersion(1, 0);
+		/// <summary>
+		/// Initializes a new instance of the <see cref="Multistream1"/> class.
+		/// </summary>
+		/// <param name="logger">The logger.</param>
+		/// <param name="message">The message.</param>
+		/// <exception cref="ArgumentNullException">logger</exception>
+		/// <exception cref="ArgumentNullException">message</exception>
+		public Multistream1(ILogger<Multistream1> logger, Message message)
+		{
+			_logger = logger ?? throw new ArgumentNullException(nameof(logger));
+			_message = message ?? throw new ArgumentNullException(nameof(message));
+		}
 
-        /// <inheritdoc />
-        public override string ToString()
-        {
-            return $"/{Name}/{Version}";
-        }
+		/// <inheritdoc />
+		public string Name { get; } = "multistream";
 
+		/// <inheritdoc />
+		public SemVersion Version { get; } = new SemVersion(1, 0);
 
-        /// <inheritdoc />
-        public async Task ProcessMessageAsync(PeerConnection connection, Stream stream, CancellationToken cancel = default(CancellationToken))
-        {
-            var msg = await Message.ReadStringAsync(stream, cancel).ConfigureAwait(false);
+		/// <inheritdoc />
+		public override string ToString() => $"/{Name}/{Version}";
 
-            // TODO: msg == "ls"
-            if (msg == "ls")
-            {
-                throw new NotImplementedException("multistream ls");
-            }
+		/// <inheritdoc />
+		public async Task ProcessMessageAsync(PeerConnection connection, Stream stream, CancellationToken cancel = default)
+		{
+			var msg = await _message.ReadStringAsync(stream, cancel).ConfigureAwait(false);
 
-            // Switch to the specified protocol
-            if (!connection.Protocols.TryGetValue(msg, out Func<PeerConnection, Stream, CancellationToken, Task> protocol))
-            {
-                await Message.WriteAsync("na", stream, cancel).ConfigureAwait(false);
-                return;
-            }
+			// TODO: msg == "ls"
+			if (msg == "ls")
+			{
+				throw new NotImplementedException("multistream ls");
+			}
 
-            // Ack protocol switch
-            log.Debug("switching to " + msg);
-            await Message.WriteAsync(msg, stream, cancel).ConfigureAwait(false);
+			// Switch to the specified protocol
+			if (!connection.Protocols.TryGetValue(msg, out Func<PeerConnection, Stream, CancellationToken, Task> protocol))
+			{
+				await _message.WriteAsync("na", stream, cancel).ConfigureAwait(false);
+				return;
+			}
 
-            // Process protocol message.
-            await protocol(connection, stream, cancel).ConfigureAwait(false);
-        }
+			// Ack protocol switch
+			_logger.LogDebug("switching to {Message}", msg);
+			await _message.WriteAsync(msg, stream, cancel).ConfigureAwait(false);
 
-    }
+			// Process protocol message.
+			await protocol(connection, stream, cancel).ConfigureAwait(false);
+		}
+	}
 }

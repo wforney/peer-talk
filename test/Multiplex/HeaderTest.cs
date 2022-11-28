@@ -1,4 +1,6 @@
-﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
+﻿namespace PeerTalk.Multiplex;
+
+using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -6,9 +8,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace PeerTalk.Multiplex
-{
-    [TestClass]
+[TestClass]
     public class HeaderTest
     {
         [TestMethod]
@@ -22,7 +22,7 @@ namespace PeerTalk.Multiplex
             Roundtrip(Header.MaxStreamId, PacketType.NewStream);
         }
 
-        void Roundtrip(long id, PacketType type)
+	private void Roundtrip(long id, PacketType type)
         {
             var header1 = new Header { StreamId = id, PacketType = type };
             var ms = new MemoryStream();
@@ -33,4 +33,3 @@ namespace PeerTalk.Multiplex
             Assert.AreEqual(header1.PacketType, header2.PacketType);
         }
     }
-}
