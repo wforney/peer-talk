@@ -248,7 +248,6 @@
 				}
 
 				_logger.LogDebug("sending message to {Peer}", peer);
-				return;
 			}
 			catch (Exception e)
 			{

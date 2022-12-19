@@ -65,7 +65,6 @@ public class FloodRouterTest
 		var topic = Guid.NewGuid().ToString();
 
 		var sp = TestSetup.GetScopedServiceProvider();
-
 		var swarm1 = sp.GetRequiredService<Swarm>();
 		swarm1.LocalPeer = self;
 		var router1 = sp.GetRequiredService<FloodRouter>();
@@ -182,22 +181,28 @@ public class FloodRouterTest
 		var topic = Guid.NewGuid().ToString();
 
 		var sp = TestSetup.GetScopedServiceProvider();
+		var sp2 = TestSetup.GetScopedServiceProvider();
 		var loggerFactory = sp.GetRequiredService<ILoggerFactory>();
+		var loggerFactory2 = sp2.GetRequiredService<ILoggerFactory>();
 		var message = sp.GetRequiredService<Message>();
+		var message2 = sp2.GetRequiredService<Message>();
 		var notificationService = sp.GetRequiredService<INotificationService>();
+		var notificationService2 = sp2.GetRequiredService<INotificationService>();
 		var protocolRegistry = sp.GetRequiredService<ProtocolRegistry>();
+		var protocolRegistry2 = sp2.GetRequiredService<ProtocolRegistry>();
 		var transportRegistry = sp.GetRequiredService<TransportRegistry>();
+		var transportRegistry2 = sp2.GetRequiredService<TransportRegistry>();
 
 		var swarm1 = new Swarm(loggerFactory, message, notificationService, protocolRegistry, transportRegistry) { LocalPeer = self };
-		var router1 = new FloodRouter(Mock.Of<ILogger<FloodRouter>>(), notificationService) { Swarm = swarm1 };
-		var ns1 = new NotificationService(Mock.Of<ILogger<NotificationService>>(), notificationService) { LocalPeer = self };
+		var router1 = new FloodRouter(loggerFactory.CreateLogger<FloodRouter>(), notificationService) { Swarm = swarm1 };
+		var ns1 = new NotificationService(loggerFactory.CreateLogger<NotificationService>(), notificationService) { LocalPeer = self };
 		ns1.Routers.Add(router1);
 		await swarm1.StartAsync();
 		await ns1.StartAsync();
 
-		var swarm2 = new Swarm(loggerFactory, message, notificationService, protocolRegistry, transportRegistry) { LocalPeer = other };
-		var router2 = new FloodRouter(Mock.Of<ILogger<FloodRouter>>(), notificationService) { Swarm = swarm2 };
-		var ns2 = new NotificationService(Mock.Of<ILogger<NotificationService>>(), notificationService) { LocalPeer = other };
+		var swarm2 = new Swarm(loggerFactory2, message2, notificationService2, protocolRegistry2, transportRegistry2) { LocalPeer = other };
+		var router2 = new FloodRouter(loggerFactory2.CreateLogger<FloodRouter>(), notificationService2) { Swarm = swarm2 };
+		var ns2 = new NotificationService(loggerFactory2.CreateLogger<NotificationService>(), notificationService2) { LocalPeer = other };
 		ns2.Routers.Add(router2);
 		await swarm2.StartAsync();
 		await ns2.StartAsync();
